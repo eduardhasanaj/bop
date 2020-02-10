@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"reflect"
+	"sync"
 
 	jsoniter "github.com/json-iterator/go"
 )
@@ -19,6 +20,9 @@ var (
 	eqDelimiter              = []byte("=")
 	quote                    = []byte(`"`)
 	maxBodyPayloadSize int64 = 1024 * 1024
+
+	bindingMaps map[reflect.Type]map[string]int = make(map[reflect.Type]map[string]int, 0)
+	mut         sync.RWMutex
 )
 
 type BodyParser struct {
@@ -48,16 +52,13 @@ func (bp *BodyParser) ParseModel(model interface{}) ([]string, error) {
 		return nil, errors.New("Only models of kind Struct are supported")
 	}
 
-	fields := map[string]*reflect.Value{}
-
-	for i := 0; i != t.NumField(); i++ {
-
-		if t.Field(i).CanSet() {
-			key := t.Type().Field(i).Tag.Get("json")
-			field := t.Field(i)
-			fields[key] = &field
-		}
+	mut.RLock()
+	bindingMap, ok := bindingMaps[t.Type()]
+	if !ok {
+		bindingMap = makeBindingMap(&t)
+		bindingMaps[t.Type()] = bindingMap
 	}
+	mut.RUnlock()
 
 	//Limit body size
 	bp.r.Body = http.MaxBytesReader(bp.w, bp.r.Body, maxBodyPayloadSize)
@@ -70,56 +71,45 @@ func (bp *BodyParser) ParseModel(model interface{}) ([]string, error) {
 
 	switch ct {
 	case "application/json":
-		columns, err := parseJsonModel(bp.r, fields)
+		columns, err := parseJsonModel(bp.r, &t)
 		return columns, err
 	case "application/x-www-form-urlencoded", "multipart/form-data":
-		columns, err := parseFromPostForm(bp.r, ct, fields)
+		columns, err := parseFromPostForm(bp.r, ct, &t)
 		return columns, err
 	}
 
 	return nil, nil
 }
 
-func parseJsonModel(r *http.Request, fields map[string]*reflect.Value) ([]string, error) {
-	it := jsoniter.Parse(jsoniter.ConfigDefault, r.Body, 512)
-	if it.Error != nil {
-		return nil, it.Error
+func parseJsonModel(r *http.Request, t *reflect.Value) ([]string, error) {
+	dec := jsoniter.NewDecoder(r.Body)
+
+	var json map[string]jsoniter.RawMessage
+
+	if err := dec.Decode(&json); err != nil {
+		return nil, err
 	}
 
-	columns := make([]string, 0, len(fields))
-	key := it.ReadObject()
-	if it.Error != nil {
-		return nil, it.Error
-	}
+	bindingMap := bindingMaps[t.Type()]
+	columns := make([]string, 0, len(bindingMap))
 
-	for key != "" {
-		valType := it.WhatIsNext()
-		if valType == jsoniter.ObjectValue || valType == jsoniter.ArrayValue {
-			return nil, errors.New("ParseModel supports only flat object model")
-		}
-
-		val, ok := fields[key]
+	for key, v := range json {
+		fIndex, ok := bindingMap[key]
 		if !ok {
-			return nil, errors.New("could not bind to model")
+			return nil, errors.New("could not bind to model: key " + key)
 		}
 
-		it.ReadVal(val.Addr().Interface())
-		if it.Error != nil {
-			return nil, errors.New("could not bind to model")
+		if err := jsoniter.Unmarshal(v, t.Field(fIndex).Addr().Interface()); err != nil {
+			return nil, errors.New("could not bind to model: key " + key)
 		}
 
 		columns = append(columns, key)
-
-		key = it.ReadObject()
-		if it.Error != nil {
-			return nil, it.Error
-		}
 	}
 
 	return columns, nil
 }
 
-func parseFromPostForm(r *http.Request, ct string, fields map[string]*reflect.Value) ([]string, error) {
+func parseFromPostForm(r *http.Request, ct string, t *reflect.Value) ([]string, error) {
 	var err error
 	if ct == "multipart/form-data" {
 		err = r.ParseMultipartForm(maxBodyPayloadSize)
@@ -131,13 +121,15 @@ func parseFromPostForm(r *http.Request, ct string, fields map[string]*reflect.Va
 		return nil, err
 	}
 
-	columns := make([]string, 0, len(fields))
+	bindingMap := bindingMaps[t.Type()]
+	columns := make([]string, 0, len(bindingMap))
 
 	for k, v := range r.PostForm {
-		val, ok := fields[k]
+		fIndex, ok := bindingMap[k]
 		if !ok {
 			return nil, errors.New("could not bind to model")
 		}
+		val := t.Field(fIndex)
 		valBytes := []byte(v[0])
 
 		//In case of string quote
@@ -195,6 +187,19 @@ func parseUrlEncModel(r *http.Request, fields map[string]*reflect.Value) ([]stri
 	}
 
 	return columns, nil
+}
+
+func makeBindingMap(t *reflect.Value) map[string]int {
+	bindingMap := make(map[string]int)
+	for i := 0; i != t.NumField(); i++ {
+
+		if t.Field(i).CanSet() {
+			key := t.Type().Field(i).Tag.Get("json")
+			bindingMap[key] = i
+		}
+	}
+
+	return bindingMap
 }
 
 func quoteString(s []byte, q []byte) []byte {
