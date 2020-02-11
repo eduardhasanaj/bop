@@ -2,7 +2,7 @@
 
 ## Overview
 
-A package that abstracts the process of filling database entities from Form values or raw body json.
+A package that abstracts the process of filling database entities from Form values or raw json.
 ParseModel return also a list of decoded columns which can be used in the database query operations.
 It supports out of the box three encoding formats:
 - application/json
