@@ -62,6 +62,8 @@ p := bop.New(w, r)
 columns, err := p.ParseModel(&custom)
 ```
 
-##Benchmarks
+## Benchmarks
+```
 BenchmarkParseModelPostForm-8   	 1374523	       864 ns/op	     160 B/op	       7 allocs/op
 BenchmarkParseJsonModel-8   	 1671302	       707 ns/op	     768 B/op	       6 allocs/op
+```
