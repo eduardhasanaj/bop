@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"mime"
 	"net/http"
 	"net/url"
 	"reflect"
@@ -64,10 +63,6 @@ func (bp *BodyParser) ParseModel(model interface{}) ([]string, error) {
 	bp.r.Body = http.MaxBytesReader(bp.w, bp.r.Body, maxBodyPayloadSize)
 
 	ct := bp.r.Header.Get("Content-Type")
-	ct, _, err := mime.ParseMediaType(ct)
-	if err != nil {
-		return nil, err
-	}
 
 	switch ct {
 	case "application/json":
