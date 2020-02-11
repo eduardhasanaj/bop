@@ -73,7 +73,7 @@ func TestParseJsonModel(t *testing.T) {
 	handler(w, r)
 }
 
-func BenchmarkParseModel(b *testing.B) {
+func BenchmarkParseModelPostForm(b *testing.B) {
 	type model struct {
 		Name string `json:"name"`
 		Age  int    `json:"age"`
@@ -124,7 +124,7 @@ func BenchmarkParseJsonModel(b *testing.B) {
 	handler(w, r)
 }
 
-func BenchmarkManualParseModel(b *testing.B) {
+func BenchmarkManualParseModelPostForm(b *testing.B) {
 	type model struct {
 		Name string `json:"name"`
 		Age  int    `json:"age"`

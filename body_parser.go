@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"mime"
 	"net/http"
 	"net/url"
 	"reflect"
@@ -26,10 +25,9 @@ var (
 )
 
 type BodyParser struct {
-	Form   url.Values
-	r      *http.Request
-	w      http.ResponseWriter
-	parsed bool
+	Form url.Values
+	r    *http.Request
+	w    http.ResponseWriter
 }
 
 func New(w http.ResponseWriter, r *http.Request) *BodyParser {
@@ -64,10 +62,6 @@ func (bp *BodyParser) ParseModel(model interface{}) ([]string, error) {
 	bp.r.Body = http.MaxBytesReader(bp.w, bp.r.Body, maxBodyPayloadSize)
 
 	ct := bp.r.Header.Get("Content-Type")
-	ct, _, err := mime.ParseMediaType(ct)
-	if err != nil {
-		return nil, err
-	}
 
 	switch ct {
 	case "application/json":
