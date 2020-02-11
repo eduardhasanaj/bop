@@ -25,10 +25,9 @@ var (
 )
 
 type BodyParser struct {
-	Form   url.Values
-	r      *http.Request
-	w      http.ResponseWriter
-	parsed bool
+	Form url.Values
+	r    *http.Request
+	w    http.ResponseWriter
 }
 
 func New(w http.ResponseWriter, r *http.Request) *BodyParser {
