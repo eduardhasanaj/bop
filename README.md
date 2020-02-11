@@ -17,8 +17,8 @@ go get github.com/eduardhasanaj/bop
 
 ## Motivation
 I was working on a e-commerce backend and it was required to have a flexible api: sending just partial 
-properties which should be updated. For models with many propertis it was a tedious and repepetitive task
-to map manually fields of the form to the appropriate struct field.
+properties which should be updated. For models with many propertis it was a tedious and repetitive task
+to manually map  fields of the form to the appropriate struct field.
 The code looks like:
 ```
 columns := make([]string, 0)
@@ -60,4 +60,10 @@ With bop the above example is simplified to:
 var custom models.Customer
 p := bop.New(w, r)
 columns, err := p.ParseModel(&custom)
+```
+
+## Benchmarks
+```
+BenchmarkParseModelPostForm-8   	 1374523	       864 ns/op	     160 B/op	       7 allocs/op
+BenchmarkParseJsonModel-8   	 1671302	       707 ns/op	     768 B/op	       6 allocs/op
 ```
