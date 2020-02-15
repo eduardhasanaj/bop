@@ -64,6 +64,8 @@ columns, err := p.ParseModel(&custom)
 
 ## Benchmarks
 ```
-BenchmarkParseModelPostForm-8   	 1374523	       864 ns/op	     160 B/op	       7 allocs/op
-BenchmarkParseJsonModel-8   	 1671302	       707 ns/op	     768 B/op	       6 allocs/op
+BenchmarkParseModelPostForm-8             153790              7445 ns/op            9061 B/op         54 allocs/op
+BenchmarkParseModelFromJson-8             315586              3828 ns/op            5937 B/op         33 allocs/op
+BenchmarkManualParseModelPostForm-8       222115              5164 ns/op            8674 B/op         38 allocs/op
+BenchmarkManualParseModelFromJson-8       387079              3028 ns/op            6233 B/op         25 allocs/op
 ```
