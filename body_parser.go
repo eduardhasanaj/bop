@@ -1,11 +1,7 @@
 package bop
 
 import (
-	"bytes"
 	"errors"
-	"fmt"
-	"io"
-	"io/ioutil"
 	"net/http"
 	"net/url"
 	"reflect"
@@ -65,17 +61,17 @@ func (bp *BodyParser) ParseModel(model interface{}) ([]string, error) {
 
 	switch ct {
 	case "application/json":
-		columns, err := parseJsonModel(bp.r, &t)
+		columns, err := parseJsonModelUsingIterator(bp.r, &t, bindingMap)
 		return columns, err
 	case "application/x-www-form-urlencoded", "multipart/form-data":
-		columns, err := parseFromPostForm(bp.r, ct, &t)
+		columns, err := parseFromPostForm(bp.r, ct, &t, bindingMap)
 		return columns, err
 	}
 
 	return nil, nil
 }
 
-func parseJsonModel(r *http.Request, t *reflect.Value) ([]string, error) {
+func parseJsonModel(r *http.Request, t *reflect.Value, bindingMap map[string]int) ([]string, error) {
 	dec := jsoniter.NewDecoder(r.Body)
 
 	var json map[string]jsoniter.RawMessage
@@ -84,7 +80,6 @@ func parseJsonModel(r *http.Request, t *reflect.Value) ([]string, error) {
 		return nil, err
 	}
 
-	bindingMap := bindingMaps[t.Type()]
 	columns := make([]string, 0, len(bindingMap))
 
 	for key, v := range json {
@@ -103,7 +98,46 @@ func parseJsonModel(r *http.Request, t *reflect.Value) ([]string, error) {
 	return columns, nil
 }
 
-func parseFromPostForm(r *http.Request, ct string, t *reflect.Value) ([]string, error) {
+func parseJsonModelUsingIterator(r *http.Request, t *reflect.Value, bindingMap map[string]int) ([]string, error) {
+	it := jsoniter.Parse(jsoniter.ConfigDefault, r.Body, 64)
+	if it.Error != nil {
+		return nil, it.Error
+	}
+
+	columns := make([]string, 0, len(bindingMap))
+	key := it.ReadObject()
+	if it.Error != nil {
+		return nil, it.Error
+	}
+
+	for key != "" {
+		valType := it.WhatIsNext()
+		if valType == jsoniter.ObjectValue || valType == jsoniter.ArrayValue {
+			return nil, errors.New("ParseModel supports only flat object model")
+		}
+
+		fIndex, ok := bindingMap[key]
+		if !ok {
+			return nil, errors.New("could not bind to model: key " + key)
+		}
+
+		it.ReadVal(t.Field(fIndex).Addr().Interface())
+		if it.Error != nil {
+			return nil, errors.New("could not bind to model")
+		}
+
+		columns = append(columns, key)
+
+		key = it.ReadObject()
+		if it.Error != nil {
+			return nil, it.Error
+		}
+	}
+
+	return columns, nil
+}
+
+func parseFromPostForm(r *http.Request, ct string, t *reflect.Value, bindingMap map[string]int) ([]string, error) {
 	var err error
 	if ct == "multipart/form-data" {
 		err = r.ParseMultipartForm(maxBodyPayloadSize)
@@ -115,7 +149,6 @@ func parseFromPostForm(r *http.Request, ct string, t *reflect.Value) ([]string, 
 		return nil, err
 	}
 
-	bindingMap := bindingMaps[t.Type()]
 	columns := make([]string, 0, len(bindingMap))
 
 	for k, v := range r.PostForm {
@@ -136,48 +169,6 @@ func parseFromPostForm(r *http.Request, ct string, t *reflect.Value) ([]string, 
 		}
 
 		columns = append(columns, k)
-	}
-
-	return columns, nil
-}
-
-func parseUrlEncModel(r *http.Request, fields map[string]*reflect.Value) ([]string, error) {
-	var reader io.Reader = r.Body
-
-	b, e := ioutil.ReadAll(reader)
-	if e != nil {
-		return nil, e
-	}
-	if int64(len(b)) > maxBodyPayloadSize {
-		return nil, errors.New("http: POST too large")
-	}
-
-	kvpArr := bytes.Split(b, urlEncDelimiter)
-	columns := make([]string, 0, len(fields))
-	for _, kvp := range kvpArr {
-		pair := bytes.Split(kvp, eqDelimiter)
-		if len(pair) != 2 {
-			return nil, errors.New("invalid url encoding")
-		}
-
-		key := string(pair[0])
-		val, ok := fields[key]
-		fmt.Println(key)
-		if !ok {
-			return nil, errors.New("could not bind to model")
-		}
-
-		//In case of string quote
-		if val.Kind() == reflect.String {
-			pair[1] = quoteString(pair[1], quote)
-		}
-
-		if err := jsoniter.Unmarshal(pair[1], val.Addr().Interface()); err != nil {
-			fmt.Println(err)
-			return nil, errors.New("could not bind to model")
-		}
-
-		columns = append(columns, key)
 	}
 
 	return columns, nil
